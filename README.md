@@ -1,4 +1,3 @@
-```
 # 📤 AndFS
 
 A lightweight frontend file uploader and reconstructable storage system built on **APDS**. Files are split into chunks, stored as strings in APDS, and can be reconstructed with perfect fidelity. Supports images, video, audio, and text/markdown files. Includes **upload and reconstruction progress bars** for large files.  
