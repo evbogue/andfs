@@ -3,12 +3,10 @@ import { apds } from 'https://esm.sh/gh/evbogue/apds/apds.js'
 export const CHUNK_SIZE = 60000
 export const MANIFEST_SIZE_LIMIT = 60000
 
-// Convert Uint8Array to string (1 char per byte)
 function uint8ToStr(bytes) {
   return Array.from(bytes, b => String.fromCharCode(b)).join('')
 }
 
-// Convert string back to Uint8Array
 function strToUint8(str) {
   const bytes = new Uint8Array(str.length)
   for (let i = 0; i < str.length; i++) {
@@ -17,7 +15,7 @@ function strToUint8(str) {
   return bytes
 }
 
-export async function make(file, onProgress) {
+export const add = async (file, onProgress) => {
   const bytes = file instanceof Uint8Array
     ? file
     : new Uint8Array(await file.arrayBuffer())
@@ -75,7 +73,7 @@ export async function make(file, onProgress) {
   return rootManifest
 }
 
-export async function recreate(manifest, onProgress) {
+export const get = async (manifest, onProgress) => {
   const HASH_LENGTH = 44
   const chunks = []
 

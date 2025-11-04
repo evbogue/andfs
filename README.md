@@ -54,11 +54,11 @@ Open your browser to the indicated local address.
 
 ## 📂 File API
 
-- **`make(file, onProgress)`** — Splits a file into chunks, stores in APDS.  
+- **`add(file, onProgress)`** — Splits a file into chunks, stores in APDS.  
   - `file`: `File` or `Uint8Array`  
   - `onProgress`: optional callback `{ step: 'upload', index, total }`  
 
-- **`recreate(manifest, onProgress)`** — Reconstructs a file from its manifest.  
+- **`get(manifest, onProgress)`** — Reconstructs a file from its manifest.  
   - `manifest`: returned from `make()`  
   - `onProgress`: optional callback `{ step: 'recreate', index, total }`  
 

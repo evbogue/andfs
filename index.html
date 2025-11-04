@@ -3,12 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <title>andfs Uploader Demo</title>
+  <style>
+    body { width: 860px; margin-left: auto; margin-right: auto; max-width:100%;}
+    code, pre {
+      max-width: 100%;
+      font-size: .9em;
+      overflow: auto;
+      word-break: break-all;
+      word-wrap: break-word;
+      white-space: pre;
+      white-space: -moz-pre-wrap;
+      white-space: pre-wrap;
+      white-space: pre\9;
+    }
+  </style>
 </head>
 <body>
-  <h1>andfs Uploader Demo</h1>
   <script type="module">
     import { andfsUploader } from './frontend.js'
-
     document.body.appendChild(await andfsUploader('myAppName'))
   </script>
 </body>

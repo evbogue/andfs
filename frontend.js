@@ -1,11 +1,10 @@
 import { h } from 'https://esm.sh/gh/evbogue/apds/lib/h.js'
 import { apds } from 'https://esm.sh/gh/evbogue/apds/apds.js'
-import { make, recreate } from './andfs.js'
+import { add, get } from './andfs.js'
 
 export async function andfsUploader(appname) {
   await apds.start(appname)
 
-  const container = h('div')
   const button = h('button', { innerText: 'Upload Media' })
   const input = h('input', {
     type: 'file',
@@ -13,12 +12,12 @@ export async function andfsUploader(appname) {
     multiple: true,
     style: 'display:none;'
   })
-  const output = h('div', [])
+
+  const output = h('div')
 
   button.addEventListener('click', () => input.click())
 
   input.addEventListener('change', async (e) => {
-    output.innerHTML = ''
     const files = e.target.files
 
     for (const file of files) {
@@ -38,11 +37,10 @@ export async function andfsUploader(appname) {
         mediaEl = h('div', { innerText: `Unsupported file type: ${file.type}` })
       }
 
-      // Progress bar for upload
       const uploadProgress = h('progress', { value: 0, max: 100, style: 'display:block;width:300px;margin:5px 0;' })
       output.appendChild(uploadProgress)
 
-      const manifest = await make(file, ({ step, index, total }) => {
+      const manifest = await add(file, ({ step, index, total }) => {
         uploadProgress.value = Math.floor((index / total) * 100)
       })
 
@@ -53,7 +51,7 @@ export async function andfsUploader(appname) {
         const recreateProgress = h('progress', { value: 0, max: 100, style: 'display:block;width:300px;margin:5px 0;' })
         output.appendChild(recreateProgress)
 
-        const bytes = await recreate(manifest, ({ step, index, total }) => {
+        const bytes = await get(manifest, ({ step, index, total }) => {
           recreateProgress.value = Math.floor((index / total) * 100)
         })
 
@@ -70,9 +68,10 @@ export async function andfsUploader(appname) {
       })
 
       output.appendChild(h('div', [
-        h('h3', { innerText: file.name }),
+        //h('h3', { innerText: file.name }),
+        h('br'),
         mediaEl,
-        h('h4', { innerText: `File hash: ${manifest.hash}` }),
+        h('h4', { innerText: manifest.hash }),
         uploadProgress,
         info,
         recreateBtn
@@ -80,9 +79,10 @@ export async function andfsUploader(appname) {
     }
   })
 
-  container.appendChild(button)
-  container.appendChild(input)
-  container.appendChild(output)
-  return container
+  return h('div', [
+    button,
+    input,
+    output
+  ])
 }
 
