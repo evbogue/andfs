@@ -8,7 +8,7 @@ A lightweight frontend file uploader and reconstructable storage system built on
 
 - Chunked file storage for efficient handling of large files.  
 - Reliable reconstruction of files from APDS storage.  
-- Progress bars during upload (`make`) and reconstruction (`recreate`).  
+- Progress bars during upload (`add`) and reconstruction (`get`).  
 - Multi-file support.  
 - Works with images, video, audio, text, and markdown.  
 - Fully frontend, no server required — all storage handled via APDS/ISO-DB.  
