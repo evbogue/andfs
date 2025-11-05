@@ -1,19 +1,7 @@
 import { apds } from 'https://esm.sh/gh/evbogue/apds/apds.js'
+import { encode, decode } from 'https://esm.sh/gh/evbogue/anproto/lib/base64.js'
 
-export const CHUNK_SIZE = 60000
-export const MANIFEST_SIZE_LIMIT = 60000
-
-function uint8ToStr(bytes) {
-  return Array.from(bytes, b => String.fromCharCode(b)).join('')
-}
-
-function strToUint8(str) {
-  const bytes = new Uint8Array(str.length)
-  for (let i = 0; i < str.length; i++) {
-    bytes[i] = str.charCodeAt(i)
-  }
-  return bytes
-}
+export const SIZE = 60000
 
 export const add = async (file, onProgress) => {
   const bytes = file instanceof Uint8Array
@@ -21,15 +9,15 @@ export const add = async (file, onProgress) => {
     : new Uint8Array(await file.arrayBuffer())
 
   const chunks = []
-  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-    chunks.push(bytes.slice(i, i + CHUNK_SIZE))
+  for (let i = 0; i < bytes.length; i += SIZE) {
+    chunks.push(bytes.slice(i, i + SIZE))
   }
 
   const chunkHashes = []
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i]
-    const chunkStr = uint8ToStr(chunk)
-    const h = await apds.make(chunkStr)
+    const chunkBase64 = encode(chunk)
+    const h = await apds.make(chunkBase64)
     chunkHashes.push(h)
     if (onProgress) onProgress({ step: 'upload', index: i + 1, total: chunks.length })
   }
@@ -59,10 +47,11 @@ export const add = async (file, onProgress) => {
     return parts
   }
 
+  // Create YAML manifest
   const rootManifest = { hash: filehash }
   const yamlText = await apds.createYaml({ concatenatedHashes })
 
-  if (yamlText.length > MANIFEST_SIZE_LIMIT) {
+  if (yamlText.length > SIZE) {
     const parts = await createParts(concatenatedHashes)
     rootManifest.next = parts[0].hash
     rootManifest.parts = parts
@@ -70,12 +59,25 @@ export const add = async (file, onProgress) => {
     rootManifest.concatenatedHashes = concatenatedHashes
   }
 
-  return rootManifest
+  // Final YAML manifest text
+  const manifestYaml = await apds.createYaml(rootManifest)
+  // Store manifest in apds
+  const manifestHash = await apds.make(manifestYaml)
+
+  // Output to terminal
+  console.log('📄 Manifest Hash:', manifestHash)
+  console.log('🧾 Manifest YAML:\n', manifestYaml)
+
+  return { manifestHash, manifestYaml }
 }
 
-export const get = async (manifest, onProgress) => {
+export const get = async (manifestInput, onProgress) => {
   const HASH_LENGTH = 44
   const chunks = []
+
+  const manifest = typeof manifestInput === 'string'
+    ? await apds.parseYaml(manifestInput)
+    : manifestInput
 
   async function loadHashes(m) {
     if (m.concatenatedHashes) {
@@ -86,9 +88,9 @@ export const get = async (manifest, onProgress) => {
 
       for (let i = 0; i < hashes.length; i++) {
         const h = hashes[i]
-        const chunkStr = await apds.get(h)
-        if (!chunkStr) throw new Error(`Missing chunk: ${h}`)
-        const chunk = strToUint8(chunkStr)
+        const chunkBase64 = await apds.get(h)
+        if (!chunkBase64) throw new Error(`Missing chunk: ${h}`)
+        const chunk = decode(chunkBase64)
         chunks.push(chunk)
         if (onProgress) onProgress({ step: 'recreate', index: i + 1, total: hashes.length })
       }

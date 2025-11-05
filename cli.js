@@ -1,33 +1,26 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-net
 
+import { parseArgs } from "jsr:@std/cli/parse-args"
+import * as path from "jsr:@std/path"
+import { ensureDir } from "jsr:@std/fs"
 import { apds } from "https://esm.sh/gh/evbogue/apds/apds.js"
 import { add, get } from "./andfs.js"
 
 await apds.start("myAppName")
 
-const args = Deno.args
+const parsed = parseArgs(Deno.args)         
+const [command, target, dest] = parsed._    
+const help = parsed.help || parsed.h        
 
-if (args.length === 0 || args[0] === "help" || args[0] === "-h") {
+if (help || !command) {
   console.log(`
-usage: andfs <command> <target>
+usage: andfs <command> <target> [dest]
 
 commands:
   add <path>     add a file or directory to andfs
   get <manifest> restore files from a saved manifest JSON
 `)
   Deno.exit(0)
-}
-
-const command = args[0]
-const target = args[1]
-
-function basename(p) {
-  const parts = p.split("/")
-  return parts[parts.length - 1]
-}
-
-function joinPath(...parts) {
-  return parts.join("/").replace(/\/+/g, "/")
 }
 
 function showProgress(step, index, total) {
@@ -39,36 +32,33 @@ async function addPath(p) {
   const stat = await Deno.stat(p)
   if (stat.isFile) {
     const file = await Deno.readFile(p)
-    const manifest = await add(file, prog => {
-      showProgress("uploading chunk", prog.index, prog.total)
-    })
-    return { name: basename(p), manifest }
+    const manifest = await add(file, prog => showProgress("uploading chunk", prog.index, prog.total))
+    return { name: path.basename(p), manifest }
   } else if (stat.isDirectory) {
     const entries = []
     for await (const entry of Deno.readDir(p)) {
-      const child = await addPath(joinPath(p, entry.name))
+      const child = await addPath(path.join(p, entry.name))
       entries.push(child)
     }
     const manifest = await add(new TextEncoder().encode(JSON.stringify(entries)))
-    return { name: basename(p), manifest, children: entries }
+    return { name: path.basename(p), manifest, children: entries }
   } else {
     throw new Error(`unsupported path: ${p}`)
   }
 }
 
 async function getManifest(node, outDir) {
-  const outPath = joinPath(outDir, node.name)
+  const outPath = path.join(outDir, node.name)
   if (node.children) {
-    await Deno.mkdir(outPath, { recursive: true })
+    await ensureDir(outPath)
     for (const child of node.children) {
       await getManifest(child, outPath)
     }
   } else {
-    const data = await get(node.manifest, prog => {
-      showProgress("recreating chunk", prog.index, prog.total)
-    })
-    await Deno.mkdir(outPath.split("/").slice(0, -1).join("/"), { recursive: true })
+    const data = await get(node.manifest, prog => showProgress("recreating chunk", prog.index, prog.total))
+    await ensureDir(path.dirname(outPath))
     await Deno.writeFile(outPath, data)
+    console.log(`restored file: ${outPath}`)
   }
 }
 
@@ -78,7 +68,8 @@ if (command === "add") {
     Deno.exit(1)
   }
   const tree = await addPath(target)
-  console.log(JSON.stringify(tree, null, 2))
+  console.log(tree)
+  //console.log(JSON.stringify(tree, null, 2)) // output manifest to terminal
   Deno.exit(0)
 } else if (command === "get") {
   if (!target) {
@@ -87,7 +78,7 @@ if (command === "add") {
   }
   const manifestText = await Deno.readTextFile(target)
   const rootNode = JSON.parse(manifestText)
-  await getManifest(rootNode, "./")
+  await getManifest(rootNode, dest || "./")
   Deno.exit(0)
 } else {
   console.error(`unknown command: ${command}`)
