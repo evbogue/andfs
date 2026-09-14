@@ -1,5 +1,5 @@
-import { h } from 'https://esm.sh/gh/evbogue/apds/lib/h.js'
-import { apds } from 'https://esm.sh/gh/evbogue/apds/apds.js'
+import { h } from 'https://esm.sh/gh/evbogue/apds@e091911502c46feaff8f18ec9865c23f42a7dc40/lib/h.js'
+import { apds } from 'https://esm.sh/gh/evbogue/apds@e091911502c46feaff8f18ec9865c23f42a7dc40/apds.js'
 import { add, get } from './andfs.js'
 
 export async function andfsUploader(appname) {
@@ -10,7 +10,7 @@ export async function andfsUploader(appname) {
     type: 'file',
     accept: 'image/*,video/*,audio/*,text/*,text/markdown',
     multiple: true,
-    style: 'display:none;'
+    style: 'display:none;',
   })
 
   const output = h('div')
@@ -25,9 +25,16 @@ export async function andfsUploader(appname) {
       let mediaEl
 
       if (file.type.startsWith('image/')) {
-        mediaEl = h('img', { src: url, style: 'max-width:300px;display:block;' })
+        mediaEl = h('img', {
+          src: url,
+          style: 'max-width:300px;display:block;',
+        })
       } else if (file.type.startsWith('video/')) {
-        mediaEl = h('video', { src: url, controls: true, style: 'max-width:300px;display:block;' })
+        mediaEl = h('video', {
+          src: url,
+          controls: true,
+          style: 'max-width:300px;display:block;',
+        })
       } else if (file.type.startsWith('audio/')) {
         mediaEl = h('audio', { src: url, controls: true })
       } else if (file.type.startsWith('text/') || file.name.endsWith('.md')) {
@@ -37,10 +44,14 @@ export async function andfsUploader(appname) {
         mediaEl = h('div', { innerText: `Unsupported file type: ${file.type}` })
       }
 
-      const uploadProgress = h('progress', { value: 0, max: 100, style: 'display:block;width:300px;margin:5px 0;' })
+      const uploadProgress = h('progress', {
+        value: 0,
+        max: 100,
+        style: 'display:block;width:300px;margin:5px 0;',
+      })
       output.appendChild(uploadProgress)
 
-      const manifest = await add(file, ({ step, index, total }) => {
+      const manifest = await add(file, ({ index, total }) => {
         uploadProgress.value = Math.floor((index / total) * 100)
       })
 
@@ -48,23 +59,42 @@ export async function andfsUploader(appname) {
 
       const recreateBtn = h('button', { innerText: 'Recreate File' })
       recreateBtn.addEventListener('click', async () => {
-        const recreateProgress = h('progress', { value: 0, max: 100, style: 'display:block;width:300px;margin:5px 0;' })
+        const recreateProgress = h('progress', {
+          value: 0,
+          max: 100,
+          style: 'display:block;width:300px;margin:5px 0;',
+        })
         output.appendChild(recreateProgress)
 
-        const bytes = await get(manifest, ({ step, index, total }) => {
+        const bytes = await get(manifest, ({ index, total }) => {
           recreateProgress.value = Math.floor((index / total) * 100)
         })
 
         const blob = new Blob([bytes], { type: file.type })
         const recreatedUrl = URL.createObjectURL(blob)
 
-        const reEl =
-          file.type.startsWith('image/') ? h('img', { src: recreatedUrl, style: 'max-width:300px;display:block;' })
-        : file.type.startsWith('video/') ? h('video', { src: recreatedUrl, controls: true, style: 'max-width:300px;display:block;' })
-        : file.type.startsWith('audio/') ? h('audio', { src: recreatedUrl, controls: true })
-        : h('pre', { innerText: await blob.text() })
+        const reEl = file.type.startsWith('image/')
+          ? h('img', {
+            src: recreatedUrl,
+            style: 'max-width:300px;display:block;',
+          })
+          : file.type.startsWith('video/')
+          ? h('video', {
+            src: recreatedUrl,
+            controls: true,
+            style: 'max-width:300px;display:block;',
+          })
+          : file.type.startsWith('audio/')
+          ? h('audio', { src: recreatedUrl, controls: true })
+          : h('pre', { innerText: await blob.text() })
 
-        output.appendChild(h('div', [h('h4', { innerText: 'Recreated:' }), recreateProgress, reEl]))
+        output.appendChild(
+          h('div', [
+            h('h4', { innerText: 'Recreated:' }),
+            recreateProgress,
+            reEl,
+          ]),
+        )
       })
 
       output.appendChild(h('div', [
@@ -74,7 +104,7 @@ export async function andfsUploader(appname) {
         h('h4', { innerText: manifest.manifestHash }),
         uploadProgress,
         info,
-        recreateBtn
+        recreateBtn,
       ]))
     }
   })
@@ -82,6 +112,6 @@ export async function andfsUploader(appname) {
   return h('div', [
     button,
     input,
-    output
+    output,
   ])
 }
