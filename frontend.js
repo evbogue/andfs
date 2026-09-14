@@ -1,6 +1,6 @@
 import { h } from 'https://esm.sh/gh/evbogue/apds@e091911502c46feaff8f18ec9865c23f42a7dc40/lib/h.js'
 import { apds } from 'https://esm.sh/gh/evbogue/apds@e091911502c46feaff8f18ec9865c23f42a7dc40/apds.js'
-import { add, get } from './andfs.js'
+import { add, get, parseManifest } from './andfs.js'
 
 export async function andfsUploader(appname) {
   await apds.start(appname)
@@ -55,7 +55,49 @@ export async function andfsUploader(appname) {
         uploadProgress.value = Math.floor((index / total) * 100)
       })
 
-      const info = h('pre', { innerText: JSON.stringify(manifest, null, 2) })
+      const { size, chunks } = parseManifest(manifest.manifest)
+      const hashField = h('input', {
+        type: 'text',
+        value: manifest.manifestHash,
+        readOnly: true,
+        style:
+          'display:block;width:100%;box-sizing:border-box;font-family:monospace;',
+      })
+      const copyStatus = h('span')
+      copyStatus.setAttribute('role', 'status')
+      const copyButton = h('button', { innerText: 'Copy hash' })
+      copyButton.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(manifest.manifestHash)
+          copyStatus.innerText = ' Hash copied.'
+        } catch {
+          hashField.focus()
+          hashField.select()
+          copyStatus.innerText =
+            ' Copy unavailable. The hash is selected; copy it manually.'
+        }
+      })
+      const details = h('details', [
+        h('summary', { innerText: 'Chunk hashes' }),
+        chunks.length
+          ? h(
+            'ol',
+            chunks.map((chunk) => h('li', [h('code', { innerText: chunk })])),
+          )
+          : h('p', { innerText: 'This file is empty and has no chunks.' }),
+      ])
+      const info = h('div', [
+        h('label', [h('strong', { innerText: 'Manifest hash' }), hashField]),
+        copyButton,
+        copyStatus,
+        h('p', {
+          innerText:
+            `${size.toLocaleString()} bytes · ${chunks.length.toLocaleString()} ${
+              chunks.length === 1 ? 'chunk' : 'chunks'
+            }`,
+        }),
+        details,
+      ])
 
       const recreateBtn = h('button', { innerText: 'Recreate File' })
       recreateBtn.addEventListener('click', async () => {
@@ -98,10 +140,9 @@ export async function andfsUploader(appname) {
       })
 
       output.appendChild(h('div', [
-        //h('h3', { innerText: file.name }),
+        h('h3', { innerText: file.name }),
         h('br'),
         mediaEl,
-        h('h4', { innerText: manifest.manifestHash }),
         uploadProgress,
         info,
         recreateBtn,
