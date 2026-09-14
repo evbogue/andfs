@@ -71,7 +71,7 @@ export async function andfsUploader(appname) {
         //h('h3', { innerText: file.name }),
         h('br'),
         mediaEl,
-        h('h4', { innerText: manifest.hash }),
+        h('h4', { innerText: manifest.manifestHash }),
         uploadProgress,
         info,
         recreateBtn
@@ -85,4 +85,3 @@ export async function andfsUploader(appname) {
     output
   ])
 }
-

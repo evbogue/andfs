@@ -1,119 +1,209 @@
-import { apds } from 'https://esm.sh/gh/evbogue/apds/apds.js'
-import { encode, decode } from 'https://esm.sh/gh/evbogue/anproto/lib/base64.js'
+// AndFS v1: a file is an ordered list of content-addressed byte chunks.
+export const SIZE = 262144
+export const MAX_CHUNKS = 16384
+export const MAX_MANIFEST = 1024 * 1024
 
-export const SIZE = 60000
+const textEncoder = new TextEncoder()
+const textDecoder = new TextDecoder('utf-8', { fatal: true })
+const bytesOf = value => value instanceof Uint8Array ? value : new Uint8Array(value)
+const base64 = bytes => {
+  let value = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    value += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  }
+  return btoa(value)
+}
 
-export const add = async (file, onProgress) => {
-  const bytes = file instanceof Uint8Array
-    ? file
-    : new Uint8Array(await file.arrayBuffer())
+export async function hash(value) {
+  const digest = await crypto.subtle.digest('SHA-256', bytesOf(value))
+  return base64(new Uint8Array(digest))
+    .replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
+}
 
-  const chunks = []
-  for (let i = 0; i < bytes.length; i += SIZE) {
-    chunks.push(bytes.slice(i, i + SIZE))
+export const validHash = value => typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value)
+
+export function manifestBytes({ size, chunks }) {
+  return textEncoder.encode(JSON.stringify({ andfs: 1, size, chunkSize: SIZE, chunks }))
+}
+
+export function parseManifest(bytes) {
+  if (bytes.length > MAX_MANIFEST) throw new Error('Manifest too large')
+  let manifest
+  try { manifest = JSON.parse(textDecoder.decode(bytes)) } catch { throw new Error('Invalid manifest') }
+  if (!manifest || manifest.andfs !== 1 || manifest.chunkSize !== SIZE ||
+      !Number.isSafeInteger(manifest.size) || manifest.size < 0 ||
+      !Array.isArray(manifest.chunks) || manifest.chunks.length > MAX_CHUNKS ||
+      manifest.chunks.length !== Math.ceil(manifest.size / SIZE) ||
+      !manifest.chunks.every(validHash)) throw new Error('Invalid AndFS v1 manifest')
+  return manifest
+}
+
+const checkAbort = signal => {
+  if (signal?.aborted) throw signal.reason || new DOMException('Aborted', 'AbortError')
+}
+
+export function createAndFS({ store, sources = [], timeoutMs = 8000 } = {}) {
+  if (!store?.get || !store?.put) throw new Error('AndFS requires a byte store')
+
+  async function getBlock(id, { signal, maxBytes = SIZE } = {}) {
+    if (!validHash(id)) throw new Error('Invalid blob hash')
+    checkAbort(signal)
+    const verify = async value => {
+      if (value === undefined || value === null) throw new Error('Missing blob')
+      const bytes = bytesOf(value)
+      if (bytes.length > maxBytes || await hash(bytes) !== id) throw new Error('Blob failed verification: ' + id)
+      return bytes
+    }
+    try { return await verify(await store.get(id)) } catch { checkAbort(signal) }
+    for (const source of sources) {
+      checkAbort(signal)
+      const controller = new AbortController()
+      const abort = () => controller.abort(signal.reason)
+      signal?.addEventListener('abort', abort, { once: true })
+      const timer = setTimeout(() => controller.abort(new Error('Source timed out')), timeoutMs)
+      try {
+        const bytes = await verify(await source.get(id, { signal: controller.signal, maxBytes }))
+        await store.put(id, bytes)
+        return bytes
+      } catch { checkAbort(signal) }
+      finally {
+        clearTimeout(timer)
+        signal?.removeEventListener('abort', abort)
+      }
+    }
+    throw new Error('No verified source for blob: ' + id)
   }
 
-  const chunkHashes = []
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i]
-    const chunkBase64 = encode(chunk)
-    const h = await apds.make(chunkBase64)
-    chunkHashes.push(h)
-    if (onProgress) onProgress({ step: 'upload', index: i + 1, total: chunks.length })
+  async function putBlock(bytes) {
+    const value = bytesOf(bytes)
+    const id = await hash(value)
+    await store.put(id, value)
+    return id
   }
 
-  const concatenatedHashes = chunkHashes.join('')
-  const filehash = await apds.make(concatenatedHashes)
+  async function add(input, { signal, onProgress } = {}) {
+    const stream = input instanceof Uint8Array || input instanceof ArrayBuffer
+      ? new Blob([input]).stream() : input instanceof Blob ? input.stream() : input
+    if (!stream?.getReader) throw new Error('Expected a Blob, byte array, or ReadableStream')
+    const reader = stream.getReader()
+    const chunks = []
+    let buffer = new Uint8Array(SIZE)
+    let used = 0
+    let size = 0
+    const flush = async () => {
+      if (!used) return
+      if (chunks.length >= MAX_CHUNKS) throw new Error('File exceeds the 4 GiB limit')
+      chunks.push(await putBlock(buffer.subarray(0, used)))
+      size += used
+      onProgress?.({ step: 'upload', index: chunks.length, total: Math.ceil(size / SIZE), bytes: size })
+      buffer = new Uint8Array(SIZE)
+      used = 0
+    }
+    try {
+      while (true) {
+        checkAbort(signal)
+        const { value, done } = await reader.read()
+        if (done) break
+        const bytes = bytesOf(value)
+        for (let offset = 0; offset < bytes.length;) {
+          const count = Math.min(SIZE - used, bytes.length - offset)
+          buffer.set(bytes.subarray(offset, offset + count), used)
+          used += count
+          offset += count
+          if (used === SIZE) await flush()
+        }
+      }
+      await flush()
+      const manifest = manifestBytes({ size, chunks })
+      const manifestHash = await putBlock(manifest)
+      return { manifestHash, manifestYaml: new TextDecoder().decode(manifest), manifest }
+    } finally {
+      await reader.cancel().catch(() => {})
+      reader.releaseLock()
+    }
+  }
 
-  async function createParts(concatHashes) {
-    const parts = []
+  async function readManifest(id, options) {
+    if (typeof id === 'object') id = id?.manifestHash
+    return parseManifest(await getBlock(id, { ...options, maxBytes: MAX_MANIFEST }))
+  }
+
+  function read(id, { start = 0, end, signal, onProgress } = {}) {
+    const controller = new AbortController()
+    const abort = () => controller.abort(signal.reason)
+    if (signal?.aborted) abort()
+    else signal?.addEventListener('abort', abort, { once: true })
+    let manifest, index, stop
+    const cleanup = () => signal?.removeEventListener('abort', abort)
+    return new ReadableStream({
+      async pull(output) {
+        try {
+          checkAbort(controller.signal)
+          if (!manifest) {
+            manifest = await readManifest(id, { signal: controller.signal })
+            stop = end ?? manifest.size
+            if (!Number.isSafeInteger(start) || !Number.isSafeInteger(stop) ||
+                start < 0 || start > stop || stop > manifest.size) throw new Error('Invalid byte range')
+            index = Math.floor(start / SIZE)
+          }
+          if (index * SIZE >= stop) { cleanup(); output.close(); return }
+          const bytes = await getBlock(manifest.chunks[index], { signal: controller.signal })
+          const expected = Math.min(SIZE, manifest.size - index * SIZE)
+          if (bytes.length !== expected) throw new Error('Chunk length mismatch')
+          const low = Math.max(0, start - index * SIZE)
+          const high = Math.min(bytes.length, stop - index * SIZE)
+          output.enqueue(bytes.slice(low, high))
+          onProgress?.({ step: 'read', index: index + 1, total: manifest.chunks.length })
+          index++
+        } catch (error) { cleanup(); output.error(error) }
+      },
+      cancel() { controller.abort(); cleanup() }
+    })
+  }
+
+  async function get(input, options = {}) {
+    const id = typeof input === 'string' ? input : input?.manifestHash
+    if (!validHash(id)) throw new Error('Expected a manifest hash')
+    const response = []
+    const reader = read(id, options).getReader()
+    let length = 0
+    try {
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        response.push(value)
+        length += value.length
+      }
+    } finally { reader.releaseLock() }
+    const bytes = new Uint8Array(length)
     let offset = 0
-    const HASH_LENGTH = 44
-
-    while (offset < concatHashes.length) {
-      const slice = concatHashes.slice(offset, offset + 800 * HASH_LENGTH)
-      const part = { concatenatedHashes: slice }
-      const yamlText = await apds.createYaml(part)
-      const partHash = await apds.make(yamlText)
-      part.hash = partHash
-      parts.push(part)
-      offset += 800 * HASH_LENGTH
-    }
-
-    for (let i = 0; i < parts.length - 1; i++) {
-      parts[i].next = parts[i + 1].hash
-    }
-
-    return parts
+    for (const part of response) { bytes.set(part, offset); offset += part.length }
+    return bytes
   }
 
-  // Create YAML manifest
-  const rootManifest = { hash: filehash }
-  const yamlText = await apds.createYaml({ concatenatedHashes })
-
-  if (yamlText.length > SIZE) {
-    const parts = await createParts(concatenatedHashes)
-    rootManifest.next = parts[0].hash
-    rootManifest.parts = parts
-  } else {
-    rootManifest.concatenatedHashes = concatenatedHashes
-  }
-
-  // Final YAML manifest text
-  const manifestYaml = await apds.createYaml(rootManifest)
-  // Store manifest in apds
-  const manifestHash = await apds.make(manifestYaml)
-
-  // Output to terminal
-  console.log('📄 Manifest Hash:', manifestHash)
-  console.log('🧾 Manifest YAML:\n', manifestYaml)
-
-  return { manifestHash, manifestYaml }
+  return { add, get, read, getBlock, manifest: readManifest, hash, putBlock }
 }
 
-export const get = async (manifestInput, onProgress) => {
-  const HASH_LENGTH = 44
-  const chunks = []
-
-  const manifest = typeof manifestInput === 'string'
-    ? await apds.parseYaml(manifestInput)
-    : manifestInput
-
-  async function loadHashes(m) {
-    if (m.concatenatedHashes) {
-      const hashes = []
-      for (let i = 0; i < m.concatenatedHashes.length; i += HASH_LENGTH) {
-        hashes.push(m.concatenatedHashes.slice(i, i + HASH_LENGTH))
-      }
-
-      for (let i = 0; i < hashes.length; i++) {
-        const h = hashes[i]
-        const chunkBase64 = await apds.get(h)
-        if (!chunkBase64) throw new Error(`Missing chunk: ${h}`)
-        const chunk = decode(chunkBase64)
-        chunks.push(chunk)
-        if (onProgress) onProgress({ step: 'recreate', index: i + 1, total: hashes.length })
-      }
+// Compatibility adapter for APDS, which currently stores text values.
+export async function apdsAndFS(apds) {
+  const encode = base64
+  const decode = value => Uint8Array.from(atob(value), char => char.charCodeAt(0))
+  return createAndFS({
+    store: {
+      get: async id => { const value = await apds.get(id); return value ? decode(value) : undefined },
+      put: async (id, bytes) => { await apds.put(id, encode(bytes)) }
     }
-
-    if (m.next) {
-      const nextYamlText = await apds.get(m.next)
-      if (!nextYamlText) throw new Error(`Missing linked manifest: ${m.next}`)
-      const nextManifest = await apds.parseYaml(nextYamlText)
-      await loadHashes(nextManifest)
-    }
-  }
-
-  await loadHashes(manifest)
-
-  const totalLength = chunks.reduce((sum, c) => sum + c.length, 0)
-  const result = new Uint8Array(totalLength)
-  let offset = 0
-  for (const chunk of chunks) {
-    result.set(chunk, offset)
-    offset += chunk.length
-  }
-
-  return result
+  })
 }
 
+let defaultFS
+async function fs() {
+  if (!defaultFS) {
+    const { apds } = await import('https://esm.sh/gh/evbogue/apds/apds.js')
+    await apds.start('andfs-v1')
+    defaultFS = await apdsAndFS(apds)
+  }
+  return defaultFS
+}
+export const add = async (file, onProgress) => (await fs()).add(file, { onProgress })
+export const get = async (manifest, onProgress) => (await fs()).get(manifest, { onProgress })

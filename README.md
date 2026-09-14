@@ -1,6 +1,10 @@
 # 📤 AndFS
 
-A lightweight frontend file uploader and reconstructable storage system built on **APDS**. Files are split into chunks, stored as strings in APDS, and can be reconstructed with perfect fidelity. Supports images, video, audio, and text/markdown files. Includes **upload and reconstruction progress bars** for large files.  
+A lightweight browser and server file store built on content-addressed chunks. Files are split into 256 KiB chunks, stored by SHA-256 hash, and reconstructed with verification. Supports images, video, audio, and text/markdown files.
+
+AndFS v1 uses one flat JSON manifest containing the file size, chunk size, and ordered chunk hashes. The manifest is itself content addressed. createAndFS accepts any byte store and optional remote sources, so the same reader works with browser storage, a server filesystem, HTTP, WebRTC, or another peer transport. read(hash, { start, end }) returns a verified ReadableStream for byte-range playback.
+
+The legacy add() and get() exports remain available and use APDS as a text-compatible store through the apdsAndFS adapter.
 
 ---
 
@@ -84,4 +88,3 @@ Open your browser to the indicated local address.
 
 ---
 MIT
-
