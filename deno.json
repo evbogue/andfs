@@ -5,13 +5,16 @@
     "test": "deno test --frozen",
     "typecheck": "deno check --frozen *.js",
     "check": "deno fmt --check && deno task lint && deno task typecheck && deno task test",
-    "serve": "deno run --frozen --allow-net --allow-read --allow-write --allow-env=ANDFS_DATA serve.js"
+    "serve": "deno run --frozen --allow-net --allow-read --allow-write --allow-env=ANDFS_DATA serve.js",
+    "peer": "deno run --frozen --allow-net --allow-read --allow-write --allow-env --allow-sys=networkInterfaces peer-server.js"
   },
   "imports": {
     "@std/assert": "jsr:@std/assert@1.0.19",
     "@std/cli/parse-args": "jsr:@std/cli@1.0.32/parse-args",
     "@std/path": "jsr:@std/path@1.1.6",
-    "@std/fs": "jsr:@std/fs@1.0.24"
+    "@std/fs": "jsr:@std/fs@1.0.24",
+    "trystero": "npm:trystero@0.25.3",
+    "werift": "npm:werift@0.23.0"
   },
   "compilerOptions": {
     "checkJs": true,

@@ -105,6 +105,33 @@ The first response reconstructs the text; the second returns its manifest JSON.
 
 Your own client can combine `createAndFS({ store, sources: [httpSource(baseURL)] })` with `httpSource` from `http.js`. The shipped browser demo does not configure that source.
 
+## Try a Trystero browser-to-server peer transfer
+
+This example uses Trystero for peer discovery and WebRTC data transfer. The Deno server peer uses Trystero's documented `werift` WebRTC connector. AndFS remains responsible for the manifest, chunk order, and verifying each block before it is cached or returned. The `peer` task grants network, disk, environment, and network-interface access for Trystero and `werift`. This is a small demo, not a durable peer network or production server configuration.
+
+First add a file to the server's disk store and copy the printed manifest hash:
+
+```sh
+deno eval --frozen '
+import { createAndFS } from "./andfs.js"
+import { diskStore } from "./stores.js"
+const files = createAndFS({ store: await diskStore("./andfs-data") })
+const result = await files.add(await Deno.readFile("./README.md"))
+console.log(result.manifestHash)
+'
+```
+
+Start the regular demo server in one terminal, then start its peer in another using that hash:
+
+```sh
+deno task serve
+deno task peer YOUR_MANIFEST_HASH
+```
+
+Open [http://127.0.0.1:8000/peer-client.html](http://127.0.0.1:8000/peer-client.html) in a browser. Enter the hash and choose **Download from server** to retrieve the seeded file. To transfer in the other direction, choose a browser file and click **Share with server**; the Deno peer requests its manifest and chunks from the browser, verifies them through AndFS, and stores them in `andfs-data/blocks/`. Both peers join the same demo room. The browser offers a reconstructed download only after every requested block has been verified.
+
+The default Trystero package uses Nostr for peer discovery; file bytes travel over the WebRTC connection after peers connect. Both sides need outbound network access, and some network pairs may need a TURN relay. This demo uses public signaling and has no access control: anyone who joins its room can request the server's seeded file or offer files to the server. Do not use it to expose private content.
+
 ## CLI status
 
 `cli.js` is a legacy APDS-based prototype with `add` and `get` branches, including experimental directory handling. It buffers files, prints progress and results together, and expects a saved manifest-tree JSON file for restore. Its add output is not a dependable machine-readable input for get. Directory restore is not hardened against hostile paths.
@@ -132,6 +159,8 @@ CI runs `deno task check`. The suite currently covers core round trips, ranges, 
 | `andfs.js`                  | Chunking, manifests, verification, streaming, and legacy APDS compatibility |
 | `stores.js`                 | Memory, IndexedDB, and disk adapters                                        |
 | `http.js`                   | HTTP read source and request handler                                        |
+| `peer-server.js`            | Trystero peer serving blocks from the disk store                            |
+| `peer-client.html`          | Browser side of the Trystero peer demo                                      |
 | `serve.js`                  | Development assets and disk-backed HTTP reads                               |
 | `frontend.js`, `index.html` | Browser demo                                                                |
 | `cli.js`                    | Legacy CLI prototype                                                        |

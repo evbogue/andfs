@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AndFS peer transfer demo</title>
+  </head>
+  <body>
+    <h1>AndFS peer transfer</h1>
+    <p>
+      Download a server file by hash, or share a browser file with the server.
+    </p>
+    <form id="download-form">
+      <label for="hash">Manifest hash</label>
+      <input id="hash" name="hash" required size="48" autocomplete="off">
+      <button>Download from server</button>
+    </form>
+    <form id="upload-form">
+      <label for="file">File to share</label>
+      <input id="file" name="file" type="file" required>
+      <button>Share with server</button>
+    </form>
+    <p id="status" role="status">Waiting for a manifest hash.</p>
+    <script type="module">
+      import { joinRoom } from 'https://esm.sh/trystero@0.25.3'
+      import { createAndFS, validHash } from './andfs.js'
+      import { browserStore } from './stores.js'
+
+      const downloadForm = document.querySelector('#download-form')
+      const uploadForm = document.querySelector('#upload-form')
+      const fileInput = document.querySelector('#file')
+      const hashInput = document.querySelector('#hash')
+      const status = document.querySelector('#status')
+      const store = await browserStore('andfs-peer-demo')
+      const allowedBlocks = new Set()
+
+      const connect = () => {
+        const room = joinRoom(
+          { appId: 'andfs-peer-demo' },
+          'andfs-peer-demo-room',
+        )
+        const blocks = room.makeAction('andfs-block-v1', {
+          kind: 'request',
+          onRequest: async (id) => {
+            if (!allowedBlocks.has(id)) return null
+            return await store.get(id) || null
+          },
+        })
+        const share = room.makeAction('andfs-share-v1', { kind: 'request' })
+        return { room, blocks, share }
+      }
+
+      const waitForPeer = (room, timeoutMs = 20000) =>
+        new Promise((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error('No peer connected in time')),
+            timeoutMs,
+          )
+          room.onPeerJoin = (peerId) => {
+            clearTimeout(timer)
+            resolve(peerId)
+          }
+        })
+
+      downloadForm.addEventListener('submit', async (event) => {
+        event.preventDefault()
+        const manifestHash = hashInput.value.trim()
+        if (!validHash(manifestHash)) {
+          status.textContent = 'That does not look like an AndFS manifest hash.'
+          return
+        }
+
+        const { room, blocks } = connect()
+        try {
+          status.textContent = 'Connecting to the server peer…'
+          const peerId = await waitForPeer(room)
+          const source = {
+            get: async (id, { signal } = {}) =>
+              await blocks.request(id, {
+                target: peerId,
+                timeoutMs: 15000,
+                signal,
+              }),
+          }
+          const files = createAndFS({ store, sources: [source] })
+          const manifest = await files.manifest(manifestHash)
+          status.textContent =
+            `Connected. Receiving ${manifest.size} bytes in ${manifest.chunks.length} chunks…`
+          const response = new Response(files.read(manifestHash))
+          const blob = await response.blob()
+          const link = document.createElement('a')
+          link.href = URL.createObjectURL(blob)
+          link.download = `${manifestHash}.bin`
+          link.textContent = 'Save reconstructed file'
+          link.onclick = () =>
+            setTimeout(() => URL.revokeObjectURL(link.href), 60000)
+          status.replaceChildren(
+            document.createTextNode('Verified file received. '),
+            link,
+          )
+        } catch (error) {
+          status.textContent = `Transfer failed: ${error.message}`
+        } finally {
+          room.leave()
+        }
+      })
+
+      uploadForm.addEventListener('submit', async (event) => {
+        event.preventDefault()
+        const file = fileInput.files[0]
+        if (!file) return
+        let room
+        try {
+          status.textContent = 'Adding file to browser storage…'
+          const files = createAndFS({ store })
+          const added = await files.add(file)
+          const manifest = await files.manifest(added.manifestHash)
+          allowedBlocks.add(added.manifestHash)
+          for (const id of manifest.chunks) allowedBlocks.add(id)
+
+          const peer = connect()
+          room = peer.room
+          status.textContent = 'Connecting to the server peer…'
+          const peerId = await waitForPeer(room)
+          const result = await peer.share.request(
+            { manifestHash: added.manifestHash },
+            { target: peerId, timeoutMs: 120000 },
+          )
+          status.textContent =
+            `Server received and verified ${result.chunks} chunks. Manifest hash: ${result.manifestHash}`
+        } catch (error) {
+          status.textContent = `Transfer failed: ${error.message}`
+        } finally {
+          room?.leave()
+        }
+      })
+    </script>
+  </body>
+</html>
