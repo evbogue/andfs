@@ -107,7 +107,7 @@ Your own client can combine `createAndFS({ store, sources: [httpSource(baseURL)]
 
 ## Try a Trystero browser-to-server peer transfer
 
-This example uses Trystero for peer discovery and WebRTC data transfer. The Deno server peer uses Trystero's documented `werift` WebRTC connector. AndFS remains responsible for the manifest, chunk order, and verifying each block before it is cached or returned. The `peer` task grants network, disk, environment, and network-interface access for Trystero and `werift`. This is a small demo, not a durable peer network or production server configuration.
+This example uses Trystero for peer discovery and WebRTC data transfer. The Deno and Node.js server peers use Trystero's documented `werift` WebRTC connector. AndFS remains responsible for the manifest, chunk order, and verifying each block before it is cached or returned. The Deno `peer` task grants network, disk, environment, and network-interface access for Trystero and `werift`. Node.js 20 or newer is required for the Node peer. This is a small demo, not a durable peer network or production server configuration.
 
 First add a file to the server's disk store and copy the printed manifest hash:
 
@@ -121,14 +121,25 @@ console.log(result.manifestHash)
 '
 ```
 
-Start the regular demo server in one terminal, then start its peer in another using that hash:
+Start the regular demo server to serve the browser page. Start either peer implementation in a second terminal, using the printed hash:
 
 ```sh
 deno task serve
 deno task peer YOUR_MANIFEST_HASH
 ```
 
-Open [http://127.0.0.1:8000/peer-client.html](http://127.0.0.1:8000/peer-client.html) in a browser. Enter the hash and choose **Download from server** to retrieve the seeded file. To transfer in the other direction, choose a browser file and click **Share with server**; the Deno peer requests its manifest and chunks from the browser, verifies them through AndFS, and stores them in `andfs-data/blocks/`. Both peers join the same demo room. The browser offers a reconstructed download only after every requested block has been verified.
+Or use the Node.js peer with the same shared disk store and room:
+
+```sh
+npm ci
+npm run peer -- YOUR_MANIFEST_HASH
+```
+
+Run one peer implementation at a time. The Node.js process provides the Trystero peer; `deno task serve` still serves the demo page and HTTP endpoints.
+
+Open [http://127.0.0.1:8000/peer-client.html](http://127.0.0.1:8000/peer-client.html) in a browser. Enter the hash and choose **Download from server** to retrieve the seeded file. To transfer in the other direction, choose a browser file and click **Share with server**; the active peer requests its manifest and chunks from the browser, verifies them through AndFS, and stores them in `andfs-data/blocks/`. Both peers join the same demo room. The browser offers a reconstructed download only after every requested block has been verified.
+
+The browser can use either the Deno or Node.js peer. Client uploads are stored by whichever peer implementation is running.
 
 The default Trystero package uses Nostr for peer discovery; file bytes travel over the WebRTC connection after peers connect. Both sides need outbound network access, and some network pairs may need a TURN relay. This demo uses public signaling and has no access control: anyone who joins its room can request the server's seeded file or offer files to the server. Do not use it to expose private content.
 
@@ -154,18 +165,20 @@ CI runs `deno task check`. The suite currently covers core round trips, ranges, 
 
 ## Project map
 
-| File                        | Purpose                                                                     |
-| --------------------------- | --------------------------------------------------------------------------- |
-| `andfs.js`                  | Chunking, manifests, verification, streaming, and legacy APDS compatibility |
-| `stores.js`                 | Memory, IndexedDB, and disk adapters                                        |
-| `http.js`                   | HTTP read source and request handler                                        |
-| `peer-server.js`            | Trystero peer serving blocks from the disk store                            |
-| `peer-client.html`          | Browser side of the Trystero peer demo                                      |
-| `serve.js`                  | Development assets and disk-backed HTTP reads                               |
-| `frontend.js`, `index.html` | Browser demo                                                                |
-| `cli.js`                    | Legacy CLI prototype                                                        |
-| `andfs.test.js`             | Current automated tests                                                     |
-| `WORK_ORDER.md`             | Milestones, acceptance checks, and stop points                              |
-| `AGENTS.md`                 | Contributor workflow and guardrails                                         |
+| File                                | Purpose                                                                     |
+| ----------------------------------- | --------------------------------------------------------------------------- |
+| `andfs.js`                          | Chunking, manifests, verification, streaming, and legacy APDS compatibility |
+| `stores.js`                         | Memory, IndexedDB, and disk adapters                                        |
+| `http.js`                           | HTTP read source and request handler                                        |
+| `peer-server.js`                    | Trystero peer serving blocks from the disk store                            |
+| `peer-server-node.js`               | Node.js version of the Trystero peer                                        |
+| `peer-client.html`                  | Browser side of the Trystero peer demo                                      |
+| `package.json`, `package-lock.json` | Pinned Node.js peer dependencies                                            |
+| `serve.js`                          | Development assets and disk-backed HTTP reads                               |
+| `frontend.js`, `index.html`         | Browser demo                                                                |
+| `cli.js`                            | Legacy CLI prototype                                                        |
+| `andfs.test.js`                     | Current automated tests                                                     |
+| `WORK_ORDER.md`                     | Milestones, acceptance checks, and stop points                              |
+| `AGENTS.md`                         | Contributor workflow and guardrails                                         |
 
 Licensed under the [MIT License](LICENSE).

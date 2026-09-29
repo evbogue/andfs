@@ -14,7 +14,7 @@
     "@std/path": "jsr:@std/path@1.1.6",
     "@std/fs": "jsr:@std/fs@1.0.24",
     "trystero": "npm:trystero@0.25.3",
-    "werift": "npm:werift@0.23.0"
+    "werift": "npm:werift@0.24.4"
   },
   "compilerOptions": {
     "checkJs": true,
