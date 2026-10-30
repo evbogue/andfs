@@ -1,5 +1,32 @@
 # AndFS Ultimate Work Order
 
+## Current priority — sustainable internet fame, 2026-10-29
+
+Status: planned; this documentation update does not complete implementation or authorize deployment.
+
+**Research purpose:** learn whether publishing on Ev’s own domain, with portable authorship and accessible conversations, leads to repeat recognition, relationships, collaborations, and opportunities at a sustainable cost in time.
+
+**Shared first milestone:** a visitor reads Ev’s Wiredove posts on evbogue.com, opens a conversation, replies without leaving the site, and can reload the same conversation. The reply is also retrievable in Wiredove. Reading requires no identity setup. Validate writes with disposable identities and isolated local services before any separately authorized public release.
+
+### Next ticket: verify the media contract used by publishing clients
+
+AndFS owns byte identity and verification. Wiredove owns upload authorization and media UX; evbogue.com owns its retained data and media gateway. A valid hash does not guarantee that another client can retrieve the bytes.
+
+- [ ] Record the exact upstream revision vendored by Wiredove and compare it with this checkout before proposing changes. Preserve v1 serialization, ordered chunks, hash encoding, and metadata outside byte identity.
+- [ ] Add or identify small portable fixtures for empty bytes, a small file, and a multi-chunk file, including expected manifest bytes/hash and chunk hashes. Derive expectations independently of the code under test.
+- [ ] Exercise missing and corrupt manifests/chunks, reconstruction, and streaming against the appropriate current work-order tickets. Fix the known identical-bytes corruption test under A08 rather than counting it as corruption evidence.
+- [ ] Hand the fixture set and verified import/API examples to Wiredove and the adapter. Application repositories own their upload, retention, range-serving, and cross-origin acceptance checks; report defects at the responsible layer.
+
+**Acceptance:** fixtures reproduce across the consuming clients; tampered bytes and unavailable blocks have distinct outcomes; successful reconstruction matches the original bytes. Run the repository’s prescribed formatting/check commands for any implementation change and document limitations without implying network retention or production security.
+
+**Deliver:** fixture provenance, actual tested revisions, checks, and a short compatibility note. Do not edit Wiredove’s vendored files in place; any later upstream adoption must be deliberate and pinned.
+
+**Stop point:** the shared media fixture/compatibility handoff is complete, or a specific upstream blocker has a focused ticket. Continue the original board one ticket at a time only when needed. General CLI work, peer transport expansion, garbage collection, and protocol changes do not block the interactive timeline unless an observed defect proves otherwise.
+
+Coordination: `../wiredove/WORK_ORDER.md`, `../muse-wiredove-adapter/REVIEW_FOLLOWUP_WORK_ORDER.md` (local workspace references).
+
+---
+
 > **North star:** And File System — store bytes anywhere, identify them once, and retrieve and verify them everywhere.
 
 This work order turns AndFS from a promising prototype into a small, dependable content-addressed file system for browsers, command lines, servers, and peer transports.
