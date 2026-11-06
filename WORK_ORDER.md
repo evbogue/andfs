@@ -8,6 +8,23 @@ Status: planned; this documentation update does not complete implementation or a
 
 **Shared first milestone:** a visitor reads Ev’s Wiredove posts on evbogue.com, opens a conversation, replies without leaving the site, and can reload the same conversation. The reply is also retrievable in Wiredove. Reading requires no identity setup. Validate writes with disposable identities and isolated local services before any separately authorized public release.
 
+### Sequencing decision — 2026-11-06
+
+Status: documentation only; implementation and compatibility acceptance remain open.
+
+**Why this order:** publishing clients already depend on AndFS v1. Establish reproducible checks and shared byte-level evidence before changing the core. A successful local round trip alone cannot prove interoperability, and a matching hash cannot prove remote retention or retrieval. The publishing milestone needs a verified compatibility handoff; it does not require completing the standalone AndFS 1.0 roadmap.
+
+1. **Restore the check baseline first.** The [November 4 hosted check](https://github.com/evbogue/andfs/actions/runs/41916030578) failed during frozen typechecking on an integrity mismatch for `https://cdn.jsdelivr.net/npm/idb@8/+esm`, before tests ran. Inspect the resolved dependency bytes and import chain, then use a reviewed exact version or vendored source while preserving direct browser imports. Do not simply delete the lockfile or accept a new hash without review. Keep A01's historical completion record, but record this regression separately.
+   - [ ] Run `deno task check` with Deno 2.7.13 and a fresh dependency cache; confirm checking leaves tracked files unchanged and record the resulting hosted run.
+2. **Complete one bounded v1 compatibility slice.** Use A02's protocol specification and independent golden fixtures, the existing A03 reference conventions, and the relevant A08 negative cases. Include empty, short UTF-8, exact-chunk and multi-chunk inputs. Inspect the actual consumers before choosing new field names or changing exports.
+   - [ ] Record each consumer's exact upstream/source revision and fixture provenance; compare manifest bytes, manifest/chunk hashes and reconstructed bytes.
+   - [ ] Record missing and corrupt content separately. Correct the identical-bytes repair test before citing it as corruption coverage.
+3. **Hand off deliberately.** Reuse the fixtures in Wiredove and the Muse adapter; record the exact command/assertion and result for each consumer. Existing application-level media tests may supply evidence, but do not automatically close upstream tickets. Adopt upstream changes through reviewed pins rather than editing vendored copies.
+
+**Ownership:** AndFS owns byte identity, verification and core storage/source contracts. Wiredove and the adapter own their upload authorization, signed message integration and media presentation; evbogue.com owns its retained data and gateway. Track failures at the layer that causes them.
+
+**Stop point:** a green reproducible baseline plus the compatibility evidence/handoff, or a focused blocker with reproduction details. This slice does not close all of A02/A03/A08 unless their full acceptance criteria pass. Resume A04–A09 deliberately afterward. Hardened standalone HTTP services and the CLI remain 1.0 work; directories, lifecycle tooling, encryption, explorer polish and new transports remain later work.
+
 ### Next ticket: verify the media contract used by publishing clients
 
 AndFS owns byte identity and verification. Wiredove owns upload authorization and media UX; evbogue.com owns its retained data and media gateway. A valid hash does not guarantee that another client can retrieve the bytes.
@@ -422,10 +439,4 @@ Items leave the parking lot only when a real user story requires them.
 
 ## Immediate next action
 
-**A01 is complete.** Its verified finish line:
-
-```sh
-deno task check
-```
-
-Take a break. The next implementation ticket is **A02 — Freeze the v1 wire format**; start it deliberately in a new session.
+Restore the reproducible check baseline described in the November 6 sequencing decision, then deliberately start the bounded v1 fixture/compatibility slice above. A01's earlier local validation is historical evidence; it does not resolve the later hosted integrity failure. Keep one implementation ticket in progress and record its observed finish line before moving on.
